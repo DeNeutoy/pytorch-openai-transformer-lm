@@ -1,3 +1,4 @@
+from typing import List, Tuple
 import re
 import ftfy
 import json
@@ -5,7 +6,7 @@ import spacy
 
 from tqdm import tqdm
 
-def get_pairs(word):
+def get_pairs(word: str) -> Tuple[str, str]:
     """
     Return set of symbol pairs in a word.
     word is represented as tuple of symbols (symbols being variable-length strings)
@@ -17,7 +18,7 @@ def get_pairs(word):
         prev_char = char
     return pairs
 
-def text_standardize(text):
+def text_standardize(text: str) -> str:
     """
     fixes some issues the spacy tokenizer had on books corpus
     also does some whitespace standardization
@@ -36,9 +37,8 @@ class TextEncoder(object):
     """
     mostly a wrapper for a public python bpe tokenizer
     """
-
-    def __init__(self, encoder_path, bpe_path):
-        self.nlp = spacy.load('en', disable=['parser', 'tagger', 'ner', 'textcat'])
+    def __init__(self, encoder_path: str, bpe_path: str):
+        self.nlp = spacy.load('en_core_web_sm', disable=['parser', 'tagger', 'ner', 'textcat'])
         self.encoder = json.load(open(encoder_path))
         self.decoder = {v:k for k,v in self.encoder.items()}
         merges = open(bpe_path).read().split('\n')[1:-1]
@@ -88,21 +88,25 @@ class TextEncoder(object):
             word = '\n</w>'
         self.cache[token] = word
         return word
+    
+    def encode_sentence(self, text: List[str]):
+        text_tokens = []
+        for token in text:
+            bpe_tokens = [self.encoder.get(t, 0) for t in self.bpe(token.lower()).split(' ')]
+            text_tokens.extend(bpe_tokens)
+        return text_tokens
 
     def encode(self, texts, verbose=True):
         texts_tokens = []
+        text_iterator = iter(texts) if not verbose else tqdm(texts, ncols=80, leave=False)
         if verbose:
-            for text in tqdm(texts, ncols=80, leave=False):
-                text = self.nlp(text_standardize(ftfy.fix_text(text)))
+            for text in text_iterator:
+                fixed_text = ftfy.fix_text(text)
+                text = self.nlp(text_standardize(fixed_text))
                 text_tokens = []
                 for token in text:
-                    text_tokens.extend([self.encoder.get(t, 0) for t in self.bpe(token.text.lower()).split(' ')])
+                    bpe_tokens = [self.encoder.get(t, 0) for t in self.bpe(token.text.lower()).split(' ')]
+                    text_tokens.extend(bpe_tokens)
                 texts_tokens.append(text_tokens)
-        else:
-            for text in texts:
-                text = self.nlp(text_standardize(ftfy.fix_text(text)))
-                text_tokens = []
-                for token in text:
-                    text_tokens.extend([self.encoder.get(t, 0) for t in self.bpe(token.text.lower()).split(' ')])
-                texts_tokens.append(text_tokens)
+
         return texts_tokens
