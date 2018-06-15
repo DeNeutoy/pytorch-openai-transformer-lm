@@ -38,12 +38,13 @@ def transform_roc(X1, X2, X3):
         xmb[i, 1, :l13, 0] = x13
         mmb[i, 0, :l12] = 1
         mmb[i, 1, :l13] = 1
-    xmb[:, :, :, 1] = np.arange(n_vocab+n_special, n_vocab+n_special+n_ctx)
+    xmb[:, :, :, 1] = np.arange(n_vocab + n_special, n_vocab + n_special + n_ctx)
     return xmb, mmb
 
 def create_batch_from_ids(sentences: List[List[int]],
                           max_timesteps: int,
                           total_vocab_size: int):
+    # TODO: do we need the delimiters? I think maybe not.
     batch_size = len(sentences)
     batch_tensor = np.zeros([batch_size, max_timesteps, 2], dtype=np.int32)
     mask = np.zeros([batch_size, max_timesteps], dtype=np.int32)
@@ -54,6 +55,7 @@ def create_batch_from_ids(sentences: List[List[int]],
         batch_tensor[i, :len(sentence), 0] = sentence
         mask[i, :len(sentence)] = 1
 
+    # this adds the positional embedding on to each input.
     batch_tensor[:, :, 1] = np.arange(total_vocab_size, total_vocab_size + max_timesteps)
     return batch_tensor, mask
 
@@ -87,7 +89,7 @@ if __name__ == '__main__':
     parser.add_argument('--clf_pdrop', type=float, default=0.1)
     parser.add_argument('--l2', type=float, default=0.01)
     parser.add_argument('--vector_l2', action='store_true')
-    parser.add_argument('--n_gpu', type=int, default=1)#4) # TODO add mutli-gpu training logic
+    parser.add_argument('--n_gpu', type=int, default=1)
     parser.add_argument('--opt', type=str, default='adam')
     parser.add_argument('--afn', type=str, default='gelu')
     parser.add_argument('--lr_schedule', type=str, default='warmup_linear')

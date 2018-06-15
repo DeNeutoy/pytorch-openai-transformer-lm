@@ -20,7 +20,6 @@ ACT_FNS = {
     'gelu': gelu
 }
 
-
 class LayerNorm(nn.Module):
     "Construct a layernorm module (See citation for details)."
     def __init__(self, n_state, e=1e-5):
@@ -78,7 +77,7 @@ class Attention(nn.Module):
         w = torch.matmul(q, k)
         if self.scale:
             w = w / math.sqrt(v.size(-1))
-        w = w * self.b + -1e9*(1-self.b) # TF implem method: mask_attn_weights
+        w = w * self.b + -1e9 * (1 - self.b) # TF implem method: mask_attn_weights
         w = nn.Softmax(dim=-1)(w)
         w = self.attn_dropout(w)
         return torch.matmul(w, v)
