@@ -156,7 +156,7 @@ class Model(nn.Module):
         nn.init.normal_(self.embed.weight, std=0.02)
 
     def forward(self, x):
-        x = x.view(-1, x.size(2), x.size(3))
+        #x = x.view(-1, x.size(2), x.size(3))
         e = self.embed(x)
         h = e.sum(dim=2)
         for block in self.h:
@@ -270,4 +270,4 @@ DEFAULT_CONFIG = dotdict({
     'attn_pdrop': 0.1,
     'resid_pdrop': 0.1,
     'afn': 'gelu',
-    'clf_pdrop': 0.1})
+    'clf_pdrop': 1.1})

@@ -114,7 +114,7 @@ if __name__ == '__main__':
     torch.cuda.manual_seed_all(args.seed)
 
     # torch.device object used throughout this script TODO add gpu setting
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    #device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     text_encoder = TextEncoder(args.encoder_path, args.bpe_path)
     encoder = text_encoder.encoder
@@ -122,8 +122,8 @@ if __name__ == '__main__':
 
     sent = encode_sentences([["this", "is", "a", "test"]], text_encoder)
 
-    print(create_batch_from_ids(sent, 512, len(encoder))[0].shape)
-
+    batch , mask= create_batch_from_ids(sent, 512, len(encoder))
+    print(batch)
     encoder['_start_'] = len(encoder)
     encoder['_delimiter_'] = len(encoder)
     encoder['_classify_'] = len(encoder)
@@ -135,5 +135,6 @@ if __name__ == '__main__':
 
     model = Model(args, vocab, args.n_ctx)
     load_openai_pretrained_model(model, n_ctx=args.n_ctx, n_special=n_special)
-    model.to(device)
+    print(model(torch.from_numpy(batch).long()))
+    #model.to(device)
 
