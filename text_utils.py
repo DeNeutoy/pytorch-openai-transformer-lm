@@ -91,10 +91,14 @@ class TextEncoder(object):
     
     def encode_sentence(self, text: List[str]):
         text_tokens = []
+        byte_pair_lengths = []
+        offset = -1
         for token in text:
             bpe_tokens = [self.encoder.get(t, 0) for t in self.bpe(token.lower()).split(' ')]
+            offset += len(bpe_tokens)
+            byte_pair_lengths.append(offset)
             text_tokens.extend(bpe_tokens)
-        return text_tokens
+        return text_tokens, byte_pair_lengths
 
     def encode(self, texts, verbose=True):
         texts_tokens = []
