@@ -7,6 +7,7 @@ import json
 import random
 import argparse
 import numpy as np
+import h5py
 
 import torch
 import torch.nn as nn
@@ -20,26 +21,6 @@ from text_utils import TextEncoder
 from utils import (encode_dataset, flatten, iter_data,
                    ResultLogger, make_path)
 
-
-def transform_roc(X1, X2, X3):
-    n_batch = len(X1)
-    # input
-    xmb = np.zeros((n_batch, 2, n_ctx, 2), dtype=np.int32)
-    # mask
-    mmb = np.zeros((n_batch, 2, n_ctx), dtype=np.float32)
-    start = encoder['_start_']
-    delimiter = encoder['_delimiter_']
-    for i, (x1, x2, x3), in enumerate(zip(X1, X2, X3)):
-        x12 = [start]+x1[:max_len]+[delimiter]+x2[:max_len]+[clf_token]
-        x13 = [start]+x1[:max_len]+[delimiter]+x3[:max_len]+[clf_token]
-        l12 = len(x12)
-        l13 = len(x13)
-        xmb[i, 0, :l12, 0] = x12
-        xmb[i, 1, :l13, 0] = x13
-        mmb[i, 0, :l12] = 1
-        mmb[i, 1, :l13] = 1
-    xmb[:, :, :, 1] = np.arange(n_vocab + n_special, n_vocab + n_special + n_ctx)
-    return xmb, mmb
 
 def create_batch_from_ids(sentences: List[List[int]],
                           max_timesteps: int,
@@ -61,8 +42,54 @@ def create_batch_from_ids(sentences: List[List[int]],
 
 
 def encode_sentences(sentences: List[List[str]], encoder):
-    return [encoder.encode_sentence(sentence) for sentence in sentences]
 
+    encodings = []
+    offsets = []
+    for sent in sentences:
+        encoding, offset = encoder.encode_sentence(sent)
+        encodings.append(encoding)
+        offsets.append(offset)
+    return encodings, offsets
+
+def get_word_embeddings(sentence_batch: torch.Tensor,
+                        offsets: List[List[int]]):
+    embeddings = []
+    for batch, offset in zip(sentence_batch, offsets):
+        word_representations = torch.index_select(batch, 1, offset)
+        embeddings.append(word_representations.data.numpy())
+
+    return embeddings
+
+
+def tokenize(line):
+    tokens = line.strip().split()
+    if tokens[-1] in ('/.', '/?', '/!'):
+        tokens[-1] = tokens[-1][1:]
+    return tokens
+
+
+def dump_openai_embeddings(datadir: str, text_encoder: TextEncoder, model, device):
+    t1 = time.time()
+    fname_in = os.path.join(datadir, 'sentences.txt')
+    fname_ids = os.path.join(datadir, 'sentence_ids.txt')
+    fname_out = os.path.join(datadir, 'openai_transformer.hdf5')
+    with open(fname_in, 'r') as fin, \
+         open(fname_ids, 'r') as fids, \
+         h5py.File(fname_out, 'w') as fout:
+
+        for ii, (sid, line) in enumerate(zip(fids, fin)):
+            tokens = tokenize(line)
+            encoded_sentence, offsets = encode_sentences([tokens], text_encoder)
+            sentence_tensor, mask = create_batch_from_ids(encoded_sentence, 512, len(text_encoder.encoder))
+            sentence_tensor= torch.from_numpy(sentence_tensor).long().to(device)
+            embeddings = get_word_embeddings(model(sentence_tensor).cpu(), torch.tensor(offsets).long())
+            embeds = np.asarray(embeddings)
+            ds = fout.create_dataset(
+                '{}'.format(sid.strip()),
+                data=embeds,
+                dtype=np.float32)
+            if ii % 100 == 0:
+                print(ii, time.time() - t1)
 
 
 if __name__ == '__main__':
@@ -113,17 +140,11 @@ if __name__ == '__main__':
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
 
-    # torch.device object used throughout this script TODO add gpu setting
-    #device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     text_encoder = TextEncoder(args.encoder_path, args.bpe_path)
     encoder = text_encoder.encoder
     n_vocab = len(text_encoder.encoder)
-
-    sent = encode_sentences([["this", "is", "a", "test"]], text_encoder)
-
-    batch , mask= create_batch_from_ids(sent, 512, len(encoder))
-    print(batch)
     encoder['_start_'] = len(encoder)
     encoder['_delimiter_'] = len(encoder)
     encoder['_classify_'] = len(encoder)
@@ -131,10 +152,13 @@ if __name__ == '__main__':
     n_special = 3
     max_len = args.n_ctx//2-2
     vocab = n_vocab + n_special + args.n_ctx
-
-
+    
+    print("loading model")
     model = Model(args, vocab, args.n_ctx)
     load_openai_pretrained_model(model, n_ctx=args.n_ctx, n_special=n_special)
-    print(model(torch.from_numpy(batch).long()))
-    #model.to(device)
+    print("moving to GPU")
+    model.to(device)
+
+    print("beginning embedding dump.")
+    dump_openai_embeddings("/net/nfs.corp/allennlp/data/srl/test/test/", text_encoder, model, device)
 
