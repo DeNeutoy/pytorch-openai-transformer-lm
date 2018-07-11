@@ -159,9 +159,11 @@ class Model(nn.Module):
         #x = x.view(-1, x.size(2), x.size(3))
         e = self.embed(x)
         h = e.sum(dim=2)
+        all_layers = [h]
         for block in self.h:
             h = block(h)
-        return h
+            all_layers.append(h)
+        return torch.stack(all_layers, 1)
 
 
 class LMHead(nn.Module):
